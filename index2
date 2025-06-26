@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Multi-AGV 搬送シミュレーター（手動編集付き）</title>
+  <style>
+    canvas { border: 1px solid #aaa; background: #f9f9f9; display: block; margin-bottom: 10px; }
+    input, button { margin: 5px; }
+  </style>
+</head>
+<body>
+  <h2>Multi-AGV 搬送シミュレーター</h2>
+  <label>AGV台数（1-5）：<input type="number" id="agvCount" value="2" min="1" max="5"></label>
+  <label>速度（m/min）：<input type="number" id="speed" value="60" min="10" max="200"></label>
+  <button onclick="applySettings()">適用</button>
+  <button onclick="start()">スタート</button>
+  <button onclick="stop()">ストップ</button>
+  <p>クリックして経路を描画。右クリックで削除。</p>
+  <canvas id="simCanvas" width="500" height="500"></canvas>
+
+  <script>
+    const canvas = document.getElementById("simCanvas");
+    const ctx = canvas.getContext("2d");
+    const gridSize = 50; // 1マス = 50px = 1m
+
+    let routes = [];
+    let agvs = [];
+    let speed = 60; // m/min
+    let moving = false;
+    let drawing = false;
+    let selectedAGV = 0;
+
+    function applySettings() {
+      const count = parseInt(document.getElementById("agvCount").value);
+      speed = parseInt(document.getElementById("speed").value);
+      agvs = [];
+      routes = [];
+      for (let i = 0; i < count; i++) {
+        routes.push([]);
+        agvs.push({ x: 0, y: 0, index: 0, color: getColor(i), route: routes[i] });
+      }
+    }
+
+    function getColor(i) {
+      const colors = ["blue", "red", "green", "orange", "purple"];
+      return colors[i % colors.length];
+    }
+
+    function drawGrid() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i <= 500; i += gridSize) {
+        ctx.strokeStyle = '#ddd';
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 500); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(500, i); ctx.stroke();
+      }
+    }
+
+    function drawRoutesAndAGVs() {
+      agvs.forEach((agv, i) => {
+        // 経路
+        const route = routes[i];
+        if (route.length > 0) {
+          ctx.strokeStyle = "black";
+          ctx.beginPath();
+          ctx.moveTo(route[0].x, route[0].y);
+          route.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+          ctx.stroke();
+        }
+
+        // AGV本体
+        ctx.fillStyle = agv.color;
+        ctx.fillRect(agv.x - 10, agv.y - 10, 20, 20);
+      });
+    }
+
+    function draw() {
+      drawGrid();
+      drawRoutesAndAGVs();
+    }
+
+    function moveAGV(agv) {
+      const route = agv.route;
+      if (route.length < 2) return;
+      const current = route[agv.index];
+      const next = route[(agv.index + 1) % route.length];
+
+      const dx = next.x - current.x;
+      const dy = next.y - current.y;
+      const dist = Math.hypot(dx, dy);
+
+      const step = (speed / 60) * (gridSize / 60); // px/frame at 60fps
+      const vx = (dx / dist) * step;
+      const vy = (dy / dist) * step;
+
+      agv.x += vx;
+      agv.y += vy;
+
+      if (Math.hypot(agv.x - current.x, agv.y - current.y) >= dist) {
+        agv.index = (agv.index + 1) % route.length;
+        agv.x = route[agv.index].x;
+        agv.y = route[agv.index].y;
+      }
+    }
+
+    function loop() {
+      if (moving) agvs.forEach(moveAGV);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function start() {
+      agvs.forEach((agv, i) => {
+        if (routes[i].length > 0) {
+          agv.index = 0;
+          agv.x = routes[i][0].x;
+          agv.y = routes[i][0].y;
+        }
+      });
+      moving = true;
+    }
+
+    function stop() {
+      moving = false;
+    }
+
+    canvas.addEventListener("click", e => {
+      if (moving) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.round((e.clientX - rect.left) / gridSize) * gridSize;
+      const y = Math.round((e.clientY - rect.top) / gridSize) * gridSize;
+      routes[selectedAGV].push({x, y});
+      draw();
+    });
+
+    canvas.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.round((e.clientX - rect.left) / gridSize) * gridSize;
+      const y = Math.round((e.clientY - rect.top) / gridSize) * gridSize;
+      const route = routes[selectedAGV];
+      routes[selectedAGV] = route.filter(p => !(p.x === x && p.y === y));
+      draw();
+    });
+
+    applySettings();
+    loop();
+  </script>
+</body>
+</html>
