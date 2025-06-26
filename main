@@ -1,0 +1,9 @@
+multi-agv-simulator/
+├── index.html             ← 入口ファイル（完成済み）
+├── js/
+│   ├── grid.js            ← グリッド描画・ルート機能
+│   ├── agv.js             ← AGVの定義と制御
+│   ├── simulation.js      ← シミュレーション制御
+│   └── main.js            ← 初期化と全体統括
+├── css/
+│   └── style.css          ← 全体のスタイル設定
