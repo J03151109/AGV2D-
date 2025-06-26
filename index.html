@@ -2,13 +2,13 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Multi-AGV 搬送シミュレーター（UI強化版）</title>
+  <title>Multi-AGV 搬送シミュレーター（UI強化＋円弧対応＋AGVごとのスタート設定）</title>
   <style>
     body { display: flex; font-family: sans-serif; }
-    #controls { width: 220px; padding: 10px; border-left: 1px solid #ccc; }
+    #controls { width: 250px; padding: 10px; border-left: 1px solid #ccc; }
     #main { flex: 1; padding: 10px; }
     canvas { border: 1px solid #aaa; background: #f9f9f9; display: block; margin-bottom: 10px; }
-    input, button { margin: 5px 0; width: 100%; }
+    input, button, select { margin: 5px 0; width: 100%; }
     h2 { margin-top: 0; }
   </style>
 </head>
@@ -20,43 +20,54 @@
   <div id="controls">
     <label>AGV台数（1-5）：<input type="number" id="agvCount" value="2" min="1" max="5"></label>
     <label>速度（m/min）：<input type="number" id="speed" value="60" min="10" max="200"></label>
+    <label>ルートパターン：
+      <select id="routeType">
+        <option value="line">直線</option>
+        <option value="arc_ru">右上円弧</option>
+        <option value="arc_rd">右下円弧</option>
+        <option value="arc_ld">左下円弧</option>
+        <option value="arc_lu">左上円弧</option>
+      </select>
+    </label>
+    <label>スタート設定AGV：
+      <select id="agvSelector">
+        <option value="0">1号車 (青)</option>
+        <option value="1">2号車 (赤)</option>
+        <option value="2">3号車 (緑)</option>
+        <option value="3">4号車 (オレンジ)</option>
+        <option value="4">5号車 (紫)</option>
+      </select>
+    </label>
     <button onclick="applySettings()">適用</button>
     <button onclick="start()">スタート</button>
     <button onclick="stop()">ストップ</button>
-
     <hr>
     <h4>操作説明</h4>
     <ul style="font-size: 14px; padding-left: 16px;">
-      <li>左クリック：線上をクリックしてルート作成</li>
-      <li>右クリック：既にあるルート上の点を削除</li>
-      <li>複数AGVが同じルートを走行します</li>
-      <li>スタート地点：最初にクリックした地点</li>
-      <li>ルートは自動で周回されます</li>
+      <li>左クリック：ルート追加（パターン選択）またはAGVのスタート位置設定</li>
+      <li>右クリック：既存の点を削除</li>
+      <li>スタート地点はAGVごとに設定可能</li>
     </ul>
   </div>
 
   <script>
     const canvas = document.getElementById("simCanvas");
     const ctx = canvas.getContext("2d");
-    const gridSize = 50; // 1マス = 50px = 1m
+    const gridSize = 50;
 
     let route = [];
     let agvs = [];
-    let speed = 60; // m/min
+    let speed = 60;
     let moving = false;
+    let agvStarts = Array(5).fill(null);
 
     function applySettings() {
       const count = parseInt(document.getElementById("agvCount").value);
       speed = parseInt(document.getElementById("speed").value);
       agvs = [];
       for (let i = 0; i < count; i++) {
-        agvs.push({ x: 0, y: 0, index: 0, color: getColor(i), route });
-      }
-      if (route.length > 0) {
-        agvs.forEach(agv => {
-          agv.x = route[0].x;
-          agv.y = route[0].y;
-        });
+        const start = agvStarts[i] || route[0] || { x: 0, y: 0 };
+        agvs.push({ x: start.x, y: start.y, index: 0, color: getColor(i), route });
       }
     }
 
@@ -75,16 +86,20 @@
     }
 
     function drawRouteAndAGVs() {
-      // 経路
       if (route.length > 0) {
         ctx.strokeStyle = "black";
         ctx.beginPath();
         ctx.moveTo(route[0].x, route[0].y);
-        route.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+        for (let i = 1; i < route.length; i++) {
+          const p = route[i];
+          if (p.type === "arc") {
+            ctx.arcTo(p.cx, p.cy, p.x, p.y, p.r);
+          } else {
+            ctx.lineTo(p.x, p.y);
+          }
+        }
         ctx.stroke();
       }
-
-      // AGV本体
       agvs.forEach(agv => {
         ctx.fillStyle = agv.color;
         ctx.fillRect(agv.x - 10, agv.y - 10, 20, 20);
@@ -123,10 +138,11 @@
 
     function start() {
       if (route.length < 1) return alert("ルートが設定されていません");
-      agvs.forEach(agv => {
+      agvs.forEach((agv, i) => {
+        const start = agvStarts[i] || route[0];
         agv.index = 0;
-        agv.x = route[0].x;
-        agv.y = route[0].y;
+        agv.x = start.x;
+        agv.y = start.y;
       });
       moving = true;
     }
@@ -140,9 +156,34 @@
       const rect = canvas.getBoundingClientRect();
       const x = Math.round((e.clientX - rect.left) / gridSize) * gridSize;
       const y = Math.round((e.clientY - rect.top) / gridSize) * gridSize;
-      route.push({x, y});
+      const type = document.getElementById("routeType").value;
+      const agvIndex = parseInt(document.getElementById("agvSelector").value);
+
+      // 右クリック済み領域かチェックなしでスタート設定：SHIFTキー同時押しでスタート登録
+      if (e.shiftKey) {
+        agvStarts[agvIndex] = { x, y };
+      } else if (route.length === 0 || type === "line") {
+        route.push({ x, y });
+      } else {
+        const prev = route[route.length - 1];
+        const arc = createArc(prev, { x, y }, type);
+        route.push(arc);
+      }
       draw();
     });
+
+    function createArc(p1, p2, type) {
+      const r = gridSize;
+      let cx, cy;
+      switch(type) {
+        case "arc_ru": cx = p2.x; cy = p1.y; break;
+        case "arc_rd": cx = p2.x; cy = p2.y; break;
+        case "arc_ld": cx = p1.x; cy = p2.y; break;
+        case "arc_lu": cx = p1.x; cy = p1.y; break;
+        default: cx = p1.x; cy = p1.y;
+      }
+      return { x: p2.x, y: p2.y, type: "arc", cx, cy, r };
+    }
 
     canvas.addEventListener("contextmenu", e => {
       e.preventDefault();
@@ -159,3 +200,4 @@
   </script>
 </body>
 </html>
+
