@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>2D搬送シミュレーター</title>
+  <style>
+    canvas { border: 1px solid #aaa; background: #f9f9f9; }
+    button { margin: 5px; }
+  </style>
+</head>
+<body>
+  <h2>2D搬送シミュレーター</h2>
+  <canvas id="simCanvas" width="500" height="500"></canvas><br>
+  <button onclick="start()">スタート</button>
+  <button onclick="stop()">ストップ</button>
+
+  <script>
+    const canvas = document.getElementById("simCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const route = [
+      { x: 50, y: 50 },
+      { x: 50, y: 250 },
+      { x: 250, y: 250 }
+    ];
+
+    let agv = { x: route[0].x, y: route[0].y, index: 0 };
+    let moving = false;
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // グリッド
+      for (let i = 0; i <= 500; i += 50) {
+        ctx.strokeStyle = '#ddd';
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, 500);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(500, i);
+        ctx.stroke();
+      }
+
+      // 経路
+      ctx.strokeStyle = "black";
+      ctx.beginPath();
+      ctx.moveTo(route[0].x, route[0].y);
+      for (let p of route.slice(1)) ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+
+      // AGV
+      ctx.fillStyle = "blue";
+      ctx.fillRect(agv.x - 10, agv.y - 10, 20, 20);
+    }
+
+    function moveAGV() {
+      if (!moving || agv.index >= route.length - 1) return;
+
+      let current = route[agv.index];
+      let next = route[agv.index + 1];
+
+      let dx = next.x - current.x;
+      let dy = next.y - current.y;
+      let dist = Math.hypot(dx, dy);
+
+      let step = 2;
+      let vx = (dx / dist) * step;
+      let vy = (dy / dist) * step;
+
+      agv.x += vx;
+      agv.y += vy;
+
+      if (Math.hypot(agv.x - current.x, agv.y - current.y) >= dist) {
+        agv.index++;
+        agv.x = route[agv.index].x;
+        agv.y = route[agv.index].y;
+      }
+    }
+
+    function loop() {
+      if (moving) moveAGV();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function start() {
+      moving = true;
+    }
+
+    function stop() {
+      moving = false;
+    }
+
+    loop(); // 初期化後すぐ描画開始
+  </script>
+</body>
+</html>
