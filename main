@@ -1,9 +1,115 @@
-multi-agv-simulator/
-├── index.html             ← 入口ファイル（完成済み）
-├── js/
-│   ├── grid.js            ← グリッド描画・ルート機能
-│   ├── agv.js             ← AGVの定義と制御
-│   ├── simulation.js      ← シミュレーション制御
-│   └── main.js            ← 初期化と全体統括
-├── css/
-│   └── style.css          ← 全体のスタイル設定
+// js/grid.js
+
+const routes = []; // 格子線に沿ったルート配列
+let lastClicked = null; // 直前のクリック点
+let startPoint = null;
+let goalPoint = null;
+
+export function drawGrid(ctx, cols = 30, rows = 20, cellSize = 50) {
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.strokeStyle = '#ddd';
+
+  for (let i = 0; i <= cols; i++) {
+    const x = i * cellSize;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, rows * cellSize);
+    ctx.stroke();
+  }
+
+  for (let j = 0; j <= rows; j++) {
+    const y = j * cellSize;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(cols * cellSize, y);
+    ctx.stroke();
+  }
+
+  drawRoutes(ctx, cellSize);
+  drawStartGoal(ctx, cellSize);
+}
+
+function drawRoutes(ctx, cellSize) {
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  routes.forEach(({ from, to }) => {
+    ctx.beginPath();
+    ctx.moveTo(from.x * cellSize + cellSize / 2, from.y * cellSize + cellSize / 2);
+    ctx.lineTo(to.x * cellSize + cellSize / 2, to.y * cellSize + cellSize / 2);
+    ctx.stroke();
+  });
+  ctx.lineWidth = 1;
+}
+
+function drawStartGoal(ctx, cellSize) {
+  if (startPoint) {
+    ctx.fillStyle = 'green';
+    ctx.font = '16px sans-serif';
+    ctx.fillText('S', startPoint.x * cellSize + 18, startPoint.y * cellSize + 32);
+  }
+  if (goalPoint) {
+    ctx.fillStyle = 'red';
+    ctx.font = '16px sans-serif';
+    ctx.fillText('G', goalPoint.x * cellSize + 18, goalPoint.y * cellSize + 32);
+  }
+}
+
+export function handleGridClick(event, canvas, cellSize = 50) {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((event.clientX - rect.left) / cellSize);
+  const y = Math.floor((event.clientY - rect.top) / cellSize);
+  const clicked = { x, y };
+
+  if (event.button === 2) {
+    // 右クリックでスタート・ゴール設定
+    if (!startPoint) {
+      startPoint = clicked;
+    } else if (!goalPoint) {
+      goalPoint = clicked;
+    }
+    return;
+  }
+
+  if (!lastClicked) {
+    lastClicked = clicked;
+  } else {
+    if (!(clicked.x === lastClicked.x && clicked.y === lastClicked.y)) {
+      routes.push({ from: lastClicked, to: clicked });
+    }
+    lastClicked = null;
+  }
+}
+
+export function handleGridDoubleClick(event, canvas, cellSize = 50) {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((event.clientX - rect.left) / cellSize);
+  const y = Math.floor((event.clientY - rect.top) / cellSize);
+
+  // ルート削除
+  const index = routes.findIndex(route =>
+    (route.from.x === x && route.from.y === y) ||
+    (route.to.x === x && route.to.y === y)
+  );
+  if (index !== -1) {
+    routes.splice(index, 1);
+    return;
+  }
+
+  // スタート・ゴール削除
+  if (startPoint && startPoint.x === x && startPoint.y === y) {
+    startPoint = null;
+  } else if (goalPoint && goalPoint.x === x && goalPoint.y === y) {
+    goalPoint = null;
+  }
+}
+
+export function resetRoutes() {
+  routes.length = 0;
+  lastClicked = null;
+  startPoint = null;
+  goalPoint = null;
+}
+
+export function getPoints() {
+  return { startPoint, goalPoint, routes };
+}
